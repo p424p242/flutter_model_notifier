@@ -1,0 +1,30 @@
+name: model_notifier
+description: "A lightweight Flutter state management solution using ChangeNotifier with dependency injection and reactive widgets."
+version: 0.0.1
+repository: https://github.com/p424p424/flutter_model_notifier
+homepage: https://github.com/p424p424/flutter_model_notifier
+issue_tracker: https://github.com/p424p424/flutter_model_notifier/issues
+documentation: https://github.com/p424p424/flutter_model_notifier#readme
+
+topics:
+  - flutter
+  - state-management
+  - dependency-injection
+  - changenotifier
+  - reactive-programming
+  - widgets
+
+environment:
+  sdk: ^3.9.2
+  flutter: ">=1.17.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^5.0.0
+
+flutter:
