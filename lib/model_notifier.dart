@@ -51,8 +51,8 @@ class ModelLocator {
   /// ```dart
   /// locator.registerGlobal<AppModel>(ModelNotifier(AppModel(0, false)));
   /// ```
-  void registerGlobal<M>(ModelNotifier<M> instance) {
-    final type = ModelNotifier<M>;
+  void registerGlobal<M extends ModelNotifier>(M instance) {
+    final type = M;
     if (_models.containsKey(type) || _lazyBuilders.containsKey(type)) {
       throw Exception('Model $type is already registered');
     }
@@ -69,8 +69,8 @@ class ModelLocator {
   /// ```dart
   /// locator.registerGlobalLazy<AppModel>(() => ModelNotifier(AppModel(0, false)));
   /// ```
-  void registerGlobalLazy<M>(ModelNotifier<M> Function() builder) {
-    final type = ModelNotifier<M>;
+  void registerGlobalLazy<M extends ModelNotifier>(M Function() builder) {
+    final type = M;
     if (_models.containsKey(type) || _lazyBuilders.containsKey(type)) {
       throw Exception('Model $type is already registered');
     }
@@ -87,8 +87,8 @@ class ModelLocator {
   /// ```dart
   /// locator.registerScoped<AppModel>(() => ModelNotifier(AppModel(0, false)));
   /// ```
-  void registerScoped<M>(ModelNotifier<M> Function() builder) {
-    final type = ModelNotifier<M>;
+  void registerScoped<M extends ModelNotifier>(M Function() builder) {
+    final type = M;
     if (_models.containsKey(type) || _lazyBuilders.containsKey(type)) {
       throw Exception('Model $type is already registered');
     }
@@ -106,12 +106,12 @@ class ModelLocator {
   /// ```dart
   /// final notifier = locator.get<AppModel>();
   /// ```
-  ModelNotifier<M> get<M>() {
-    final type = ModelNotifier<M>;
+  M get<M extends ModelNotifier>() {
+    final type = M;
     if (_models.containsKey(type)) {
-      return _models[type] as ModelNotifier<M>;
+      return _models[type] as M;
     } else if (_lazyBuilders.containsKey(type)) {
-      final instance = _lazyBuilders[type]!() as ModelNotifier<M>;
+      final instance = _lazyBuilders[type]!() as M;
       _models[type] = instance;
       final isScoped = _isScoped[type] ?? false;
       if (isScoped) {
@@ -228,7 +228,7 @@ class WatchState extends State<Watch> {
 /// final notifier = ModelNotifier(AppModel(0, false));
 /// notifier.model = notifier.model.copyWith(count: 1);
 /// ```
-final class ModelNotifier<T> extends ChangeNotifier {
+abstract class ModelNotifier<T> extends ChangeNotifier {
   /// Creates a notifier with initial model; notifies immediately.
   ///
   /// ⚠️ Warning: Provide a fully initialized model to avoid nulls.
@@ -315,43 +315,4 @@ final class ModelNotifier<T> extends ChangeNotifier {
       ModelLocator.instance._remove(_scopedType!);
     }
   }
-}
-
-/// Alias for async results returning [Result].
-///
-/// Example:
-/// ```dart
-/// AsyncResult<int, String> fetch() async => Ok(42);
-/// ```
-typedef AsyncResult<T, E> = Future<Result<T, E>>;
-
-/// Sealed result type: success ([Ok]) or failure ([Error]).
-///
-/// 💡 Tip: Use switch for pattern matching.
-///
-/// Example:
-/// ```dart
-/// switch (result) {
-///   case Ok(:final value): print(value);
-///   case Error(:final error): print(error);
-/// }
-/// ```
-sealed class Result<O, E> {}
-
-/// Success result with value.
-class Ok<O, E> extends Result<O, E> {
-  /// Creates success with [value].
-  Ok(this.value);
-
-  /// The success value.
-  final O value;
-}
-
-/// Failure result with error.
-class Error<O, E> extends Result<O, E> {
-  /// Creates failure with [error].
-  Error(this.error);
-
-  /// The error value.
-  final E error;
 }
