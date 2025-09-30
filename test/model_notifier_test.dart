@@ -14,13 +14,18 @@ class TestModel {
   }
 }
 
+// Concrete implementation for testing
+class TestModelNotifier extends ModelNotifier<TestModel> {
+  TestModelNotifier(super.initial);
+}
+
 // Helper to track disposal without extending final class
 class DisposalTracker {
   bool disposed = false;
   void markDisposed() => disposed = true;
 }
 
-extension TestExtensions on ModelNotifier<TestModel> {
+extension TestExtensions on TestModelNotifier {
   void updateValue(int newValue) {
     model = model.copyWith(value: newValue);
   }
@@ -37,70 +42,134 @@ void main() {
     });
 
     test('registers and gets global instance', () {
-      final instance = ModelNotifier<TestModel>(TestModel());
-      ModelLocator.instance.registerGlobal<TestModel>(instance);
-      final retrieved = ModelLocator.instance.get<TestModel>();
+      final instance = TestModelNotifier(TestModel());
+      ModelLocator.instance.registerGlobal<TestModelNotifier>(instance);
+      final retrieved = ModelLocator.instance.get<TestModelNotifier>();
       expect(retrieved, instance);
     });
 
     test('registers and gets global lazy', () {
-      ModelLocator.instance.registerGlobalLazy<TestModel>(
-        () => ModelNotifier<TestModel>(TestModel()),
+      ModelLocator.instance.registerGlobalLazy<TestModelNotifier>(
+        () => TestModelNotifier(TestModel()),
       );
-      final retrieved = ModelLocator.instance.get<TestModel>();
+      final retrieved = ModelLocator.instance.get<TestModelNotifier>();
       expect(retrieved.model.value, 0);
     });
 
     test('registers and gets scoped lazy', () {
-      ModelLocator.instance.registerScoped<TestModel>(
-        () => ModelNotifier<TestModel>(TestModel()),
+      ModelLocator.instance.registerScoped<TestModelNotifier>(
+        () => TestModelNotifier(TestModel()),
       );
-      final retrieved = ModelLocator.instance.get<TestModel>();
+      final retrieved = ModelLocator.instance.get<TestModelNotifier>();
       expect(retrieved.model.value, 0);
     });
 
     test('throws if not registered', () {
-      expect(() => ModelLocator.instance.get<TestModel>(), throwsException);
+      expect(() => ModelLocator.instance.get<TestModelNotifier>(), throwsException);
     });
 
     test('throws on duplicate registration', () {
-      final instance = ModelNotifier<TestModel>(TestModel());
-      ModelLocator.instance.registerGlobal<TestModel>(instance);
-      expect(() => ModelLocator.instance.registerGlobal<TestModel>(instance), throwsException);
-      expect(() => ModelLocator.instance.registerGlobalLazy<TestModel>(() => instance), throwsException);
-      expect(() => ModelLocator.instance.registerScoped<TestModel>(() => instance), throwsException);
+      final instance = TestModelNotifier(TestModel());
+      ModelLocator.instance.registerGlobal<TestModelNotifier>(instance);
+      expect(() => ModelLocator.instance.registerGlobal<TestModelNotifier>(instance), throwsException);
+      expect(() => ModelLocator.instance.registerGlobalLazy<TestModelNotifier>(() => instance), throwsException);
+      expect(() => ModelLocator.instance.registerScoped<TestModelNotifier>(() => instance), throwsException);
     });
 
     test('scoped instance gets auto-removed when disposed', () {
-      ModelLocator.instance.registerScoped<TestModel>(
-        () => ModelNotifier<TestModel>(TestModel(value: 42)),
+      ModelLocator.instance.registerScoped<TestModelNotifier>(
+        () => TestModelNotifier(TestModel(value: 42)),
       );
 
       // First access creates the instance
-      final firstInstance = ModelLocator.instance.get<TestModel>();
+      final firstInstance = ModelLocator.instance.get<TestModelNotifier>();
       expect(firstInstance.model.value, 42);
 
       // Dispose the instance
       firstInstance.dispose();
 
       // Next access should create a new instance
-      final secondInstance = ModelLocator.instance.get<TestModel>();
+      final secondInstance = ModelLocator.instance.get<TestModelNotifier>();
       expect(secondInstance.model.value, 42);
       expect(secondInstance, isNot(firstInstance));
     });
 
     test('reset clears registrations', () {
-      ModelLocator.instance.registerGlobal<TestModel>(
-        ModelNotifier<TestModel>(TestModel()),
+      ModelLocator.instance.registerGlobal<TestModelNotifier>(
+        TestModelNotifier(TestModel()),
       );
       ModelLocator.instance.reset();
-      expect(() => ModelLocator.instance.get<TestModel>(), throwsException);
+      expect(() => ModelLocator.instance.get<TestModelNotifier>(), throwsException);
+    });
+
+    test('global instances are never disposed when subscribers drop', () {
+      final instance = TestModelNotifier(TestModel(value: 42));
+      ModelLocator.instance.registerGlobal<TestModelNotifier>(instance);
+
+      // Add and remove listeners to simulate subscriber lifecycle
+      var listener1Called = false;
+      var listener2Called = false;
+
+      void listener1() => listener1Called = true;
+      void listener2() => listener2Called = true;
+
+      instance.addListener(listener1);
+      instance.addListener(listener2);
+
+      // Trigger change to verify listeners work
+      instance.updateValue(100);
+      expect(listener1Called, true);
+      expect(listener2Called, true);
+
+      // Reset flags
+      listener1Called = false;
+      listener2Called = false;
+
+      // Remove all listeners
+      instance.removeListener(listener1);
+      instance.removeListener(listener2);
+
+      // Global instance should still be accessible and functional
+      final retrieved = ModelLocator.instance.get<TestModelNotifier>();
+      expect(retrieved, instance);
+      expect(retrieved.model.value, 100);
+
+      // Should still be able to add new listeners
+      instance.addListener(() {});
+      instance.updateValue(200);
+      expect(instance.model.value, 200);
+    });
+
+    test('global lazy instances are never disposed when subscribers drop', () {
+      ModelLocator.instance.registerGlobalLazy<TestModelNotifier>(
+        () => TestModelNotifier(TestModel(value: 42)),
+      );
+
+      // First access creates the instance
+      final firstInstance = ModelLocator.instance.get<TestModelNotifier>();
+      expect(firstInstance.model.value, 42);
+
+      // Add and remove listeners
+      var listenerCalled = false;
+      void listener() => listenerCalled = true;
+
+      firstInstance.addListener(listener);
+      firstInstance.updateValue(100);
+      expect(listenerCalled, true);
+
+      // Remove listener
+      firstInstance.removeListener(listener);
+
+      // Global lazy instance should still be accessible
+      final secondInstance = ModelLocator.instance.get<TestModelNotifier>();
+      expect(secondInstance, firstInstance); // Same instance
+      expect(secondInstance.model.value, 100);
     });
   });
 
   group('ModelNotifier', () {
     test('initializes with model and notifies listeners', () {
-      final notifier = ModelNotifier<TestModel>(TestModel(value: 0));
+      final notifier = TestModelNotifier(TestModel(value: 0));
       expect(notifier.model.value, 0);
 
       var callCount = 0;
@@ -111,18 +180,18 @@ void main() {
     });
 
     test('compute executes computation', () {
-      final notifier = ModelNotifier<TestModel>(TestModel());
+      final notifier = TestModelNotifier(TestModel());
       final result = notifier.compute<int>(() => 42 * 2);
       expect(result, 84);
     });
 
     test('compute handles exceptions gracefully', () {
-      final notifier = ModelNotifier<TestModel>(TestModel());
+      final notifier = TestModelNotifier(TestModel());
       expect(() => notifier.compute<int>(() => throw Exception('test')), throwsException);
     });
 
     test('multiple listeners work correctly', () {
-      final notifier = ModelNotifier<TestModel>(TestModel(value: 0));
+      final notifier = TestModelNotifier(TestModel(value: 0));
       var listener1Called = false;
       var listener2Called = false;
 
@@ -136,7 +205,7 @@ void main() {
     });
 
     test('removing listeners works correctly', () {
-      final notifier = ModelNotifier<TestModel>(TestModel(value: 0));
+      final notifier = TestModelNotifier(TestModel(value: 0));
       var listenerCalled = false;
       void listener() => listenerCalled = true;
 
@@ -151,7 +220,7 @@ void main() {
     });
 
     test('dispose sets disposed flag and calls super', () {
-      final notifier = ModelNotifier<TestModel>(TestModel());
+      final notifier = TestModelNotifier(TestModel());
       var listenerCalled = false;
       notifier.addListener(() => listenerCalled = true);
       // Verify listener was added by triggering a change
@@ -173,7 +242,7 @@ void main() {
       ModelLocator.instance.reset();
     });
     testWidgets('subscribes and rebuilds on model change', (tester) async {
-      final notifier = ModelNotifier<TestModel>(TestModel(value: 0));
+      final notifier = TestModelNotifier(TestModel(value: 0));
 
       await tester.pumpWidget(
         MaterialApp(
@@ -190,7 +259,7 @@ void main() {
     });
 
     testWidgets('nested Watch rebuilds granularly', (tester) async {
-      final notifier = ModelNotifier<TestModel>(TestModel(value: 0));
+      final notifier = TestModelNotifier(TestModel(value: 0));
 
       var outerBuilds = 0;
       var innerBuilds = 0;
@@ -224,7 +293,7 @@ void main() {
     });
 
     testWidgets('multiple Watch widgets subscribe independently', (tester) async {
-      final notifier = ModelNotifier<TestModel>(TestModel(value: 0));
+      final notifier = TestModelNotifier(TestModel(value: 0));
 
       var watch1Builds = 0;
       var watch2Builds = 0;
@@ -255,8 +324,8 @@ void main() {
     });
 
     testWidgets('granular rebuilding - only affected Watch widgets rebuild', (tester) async {
-      final notifier1 = ModelNotifier<TestModel>(TestModel(value: 0));
-      final notifier2 = ModelNotifier<TestModel>(TestModel(value: 100));
+      final notifier1 = TestModelNotifier(TestModel(value: 0));
+      final notifier2 = TestModelNotifier(TestModel(value: 100));
 
       var watch1Builds = 0;
       var watch2Builds = 0;
@@ -294,7 +363,7 @@ void main() {
     });
 
     testWidgets('dispose is called when Watch widgets are removed from tree', (tester) async {
-      final notifier = ModelNotifier<TestModel>(TestModel(value: 0));
+      final notifier = TestModelNotifier(TestModel(value: 0));
 
       // Track if the widget was built (indicating subscription)
       var widgetBuilt = false;
@@ -317,38 +386,38 @@ void main() {
       // The notifier should be disposed when all subscribers are gone
       // We can verify this by checking that model changes don't cause issues
       // and that we can still create new instances
-      final newNotifier = ModelNotifier<TestModel>(TestModel(value: 10));
+      final newNotifier = TestModelNotifier(TestModel(value: 10));
       expect(newNotifier.model.value, 10);
     });
 
     testWidgets('scoped notifiers are destroyed in DI when subscribers are dropped', (tester) async {
-      ModelLocator.instance.registerScoped<TestModel>(
-        () => ModelNotifier<TestModel>(TestModel(value: 42)),
+      ModelLocator.instance.registerScoped<TestModelNotifier>(
+        () => TestModelNotifier(TestModel(value: 42)),
       );
 
       // First access creates the instance
-      final firstInstance = ModelLocator.instance.get<TestModel>();
+      final firstInstance = ModelLocator.instance.get<TestModelNotifier>();
       expect(firstInstance.model.value, 42);
 
       // Use the instance in a Watch widget
       await tester.pumpWidget(
         MaterialApp(
           home: Watch((context) {
-            final notifier = ModelLocator.instance.get<TestModel>();
+            final notifier = ModelLocator.instance.get<TestModelNotifier>();
             return Text('Value: ${notifier.model.value}');
           }),
         ),
       );
 
       // Verify the instance is the same
-      expect(ModelLocator.instance.get<TestModel>(), firstInstance);
+      expect(ModelLocator.instance.get<TestModelNotifier>(), firstInstance);
 
       // Remove the Watch widget
       await tester.pumpWidget(const SizedBox());
 
       // The scoped instance should be disposed and removed from DI
       // Next access should create a new instance
-      final secondInstance = ModelLocator.instance.get<TestModel>();
+      final secondInstance = ModelLocator.instance.get<TestModelNotifier>();
       expect(secondInstance.model.value, 42);
       expect(secondInstance, isNot(firstInstance));
     });
@@ -364,8 +433,8 @@ void main() {
 
     testWidgets('disposal unsubscribes', (tester) async {
       // Use a scoped instance to test proper disposal
-      ModelLocator.instance.registerScoped<TestModel>(
-        () => ModelNotifier<TestModel>(TestModel(value: 0)),
+      ModelLocator.instance.registerScoped<TestModelNotifier>(
+        () => TestModelNotifier(TestModel(value: 0)),
       );
 
       var builds = 0;
@@ -374,7 +443,7 @@ void main() {
         MaterialApp(
           home: Watch((context) {
             builds++;
-            final notifier = ModelLocator.instance.get<TestModel>();
+            final notifier = ModelLocator.instance.get<TestModelNotifier>();
             notifier.model; // Access to subscribe
             return const SizedBox();
           }),
@@ -386,59 +455,42 @@ void main() {
 
       // For scoped instances, the notifier should be disposed when no subscribers remain
       // We can verify this by checking that a new instance is created on next access
-      final newNotifier = ModelLocator.instance.get<TestModel>();
+      final newNotifier = ModelLocator.instance.get<TestModelNotifier>();
       expect(newNotifier.model.value, 0);
     });
-  });
 
-  group('Result Types', () {
-    test('Ok holds value', () {
-      final ok = Ok<int, String>(42);
-      expect(ok.value, 42);
-    });
+    testWidgets('global instances are not disposed when Watch widgets are removed', (tester) async {
+      // Register a global instance
+      final globalInstance = TestModelNotifier(TestModel(value: 42));
+      ModelLocator.instance.registerGlobal<TestModelNotifier>(globalInstance);
 
-    test('Error holds error', () {
-      final err = Error<int, String>('fail');
-      expect(err.error, 'fail');
-    });
+      var builds = 0;
 
-    test('pattern matching works', () {
-      final result = Ok<int, String>(10);
-      expect(result.value, 10);
-    });
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Watch((context) {
+            builds++;
+            final notifier = ModelLocator.instance.get<TestModelNotifier>();
+            notifier.model; // Access to subscribe
+            return Text('Value: ${notifier.model.value}');
+          }),
+        ),
+      );
+      expect(builds, 1);
+      expect(find.text('Value: 42'), findsOneWidget);
 
-    test('Result exhaustiveness with pattern matching', () {
-      final okResult = Ok<int, String>(42);
-      final errResult = Error<int, String>('error');
+      // Remove Watch widget
+      await tester.pumpWidget(const SizedBox());
 
-      // Test Ok case - we know it's Ok by construction
-      expect(okResult.value, 42);
+      // Global instance should still be accessible and functional
+      final retrieved = ModelLocator.instance.get<TestModelNotifier>();
+      expect(retrieved, globalInstance);
+      expect(retrieved.model.value, 42);
 
-      // Test Error case - we know it's Error by construction
-      expect(errResult.error, 'error');
-    });
-
-    test('Result equality works correctly', () {
-      final ok1 = Ok<int, String>(10);
-      final ok2 = Ok<int, String>(10);
-      final ok3 = Ok<int, String>(20);
-      final err1 = Error<int, String>('error');
-      final err2 = Error<int, String>('error');
-      final err3 = Error<int, String>('different');
-
-      expect(ok1.value == ok2.value, true);
-      expect(ok1.value == ok3.value, false);
-      expect(err1.error == err2.error, true);
-      expect(err1.error == err3.error, false);
-      // Verify they are different types by checking runtimeType
-      expect(ok1.runtimeType.toString(), contains('Ok'));
-      expect(err1.runtimeType.toString(), contains('Error'));
-    });
-
-    test('AsyncResult type alias works', () async {
-      final AsyncResult<int, String> asyncResult = Future.value(Ok<int, String>(100));
-      final result = await asyncResult;
-      expect((result as Ok<int, String>).value, 100);
+      // Should still be able to update and use the instance
+      retrieved.updateValue(100);
+      expect(retrieved.model.value, 100);
     });
   });
+
 }

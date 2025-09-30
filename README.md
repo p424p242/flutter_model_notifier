@@ -24,37 +24,38 @@ ModelNotifier is a minimalistic Flutter package for reactive state management, e
    ```  
    **HINT**: Think about the state you want, model it, and then write simple functions to deal with that state. Include loading states as part of the model for sane transient handling.
 
-3. **Register Notifiers**  
-   In `main.dart`, register via `ModelLocator`.  
+3. **Create a Notifier Implementation**
+   Extend `ModelNotifier` for your specific model and add methods directly.
+   ```dart
+   class AppModelNotifier extends ModelNotifier<AppModel> {
+     AppModelNotifier(super.initial);
+
+     Future<void> increment() async {
+       model = model.copyWith(isLoading: true);
+       await Future.delayed(Duration(seconds: 1));
+       model = model.copyWith(count: model.count + 1, isLoading: false);
+     }
+   }
+   ```
+
+4. **Register Notifiers**
+   In `main.dart`, register via `ModelLocator`.
    ```dart
    void main() {
      final locator = ModelLocator.instance;
-     locator.registerScoped<AppModel>(
-       () => ModelNotifier(AppModel(0, false)),
+     locator.registerScoped<AppModelNotifier>(
+       () => AppModelNotifier(AppModel(0, false)),
      );
      runApp(MyApp());
    }
    ```
 
-4. **Add Methods via Extensions**  
-   Extend `ModelNotifier<YourModel>` for logic.  
-   ```dart
-   extension AppExtensions on ModelNotifier<AppModel> {
-     AsyncResult<AppModel, Object> increment() async {
-       model = model.copyWith(isLoading: true);
-       await Future.delayed(Duration(seconds: 1));
-       model = model.copyWith(count: model.count + 1, isLoading: false);
-       return Ok(model);
-     }
-   }
-   ```
-
-5. **Use in Widgets**  
-   Fetch inside `Watch` builder; access `model` for reactivity.  
+4. **Use in Widgets**
+   Fetch inside `Watch` builder; access `model` for reactivity.
    ```dart
    Watch(
      (_) {
-       final notifier = ModelLocator.instance.get<AppModel>();
+       final notifier = ModelLocator.instance.get<AppModelNotifier>();
        return Column(
          children: [
            Text('${notifier.model.count}'),
@@ -74,18 +75,17 @@ ModelNotifier is a minimalistic Flutter package for reactive state management, e
 ### Core Components
 - **ModelLocator**: Singleton DI for registering/retrieving notifiers. Supports global (persistent) and scoped (auto-dispose on unsubscribed) lifecycles.
 - **Watch**: Stateful widget that auto-subscribes to accessed notifiers during build, enabling granular rebuilds. Nest for optimization.
-- **ModelNotifier<T>**: Final class holding immutable state. Use getter/setter for `model`; notifies on changes.
-- **AsyncResult & Result**: Type alias and sealed class for async ops with `Ok`/`Error`.
+- **ModelNotifier<T>**: Abstract class holding immutable state. Extend for specific models. Use getter/setter for `model`; notifies on changes.
 
 ### Handling Transient States and Errors
-Transient states (e.g., loading, computing) are modeled directly in the immutable model class, avoiding conditional hell like exhaustive checks or pattern matching across fragmented states. This keeps logic simple: Update via `copyWith` in extension methods, and the UI reacts uniformly via `Watch`.
+Transient states (e.g., loading, computing) are modeled directly in the immutable model class, avoiding conditional hell like exhaustive checks or pattern matching across fragmented states. This keeps logic simple: Update via `copyWith` in notifier methods, and the UI reacts uniformly via `Watch`.
 
 ModelNotifiers require an initial state on instantiation, reducing initialization complexity. Avoid optionals/nulls by initializing models in `main.dart`—make async calls there if needed, then pass resolved data to the notifier. This ensures safe access without runtime checks.
 
-For errors, methods return `Result` (Ok/Error). Call from the UI layer to handle flexibly (e.g., toast, dialog), keeping errors separate from transient states—no mashing into one mega-model. This prevents spaghetti code while maintaining separation of concerns.
+For errors, handle them directly in your notifier methods using try/catch blocks and update the model state accordingly, or use standard Dart error handling patterns.
 
 ### Recommended File Structure
-Organize your code for clarity: Place model classes (data/state) in a `models/` folder and notifier extensions in a `notifiers/` folder. Example structure:  
+Organize your code for clarity: Place model classes (data/state) in a `models/` folder and notifier implementations in a `notifiers/` folder. Example structure:
 ```
 lib
 ├── main.dart
@@ -113,13 +113,14 @@ lib
 **DO's**:
 - Use immutable models with `copyWith`.
 - Fetch notifiers inside `Watch` builders.
-- Add methods via extensions.
+- Add methods directly to your notifier classes.
 - Register source notifiers before dependents.
 - Remove listeners in `dispose` for cross-notifier deps.
+- Extend `ModelNotifier` for your specific models.
 
 **DON'Ts**:
-- Subclass `ModelNotifier` (it's final).
+- Instantiate `ModelNotifier` directly (it's abstract).
 - Mutate models directly; always use `copyWith`.
 - Declare scoped notifier variables outside `Watch`.
 - Create cyclic dependencies between models.
-- Forget to handle `Result` in async calls.
+- Forget error handling in async methods.

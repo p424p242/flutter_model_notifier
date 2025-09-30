@@ -296,7 +296,8 @@ abstract class ModelNotifier<T> extends ChangeNotifier {
   /// Internal subscriber removal.
   void _removeWatch(WatchState subscriber) {
     _subscribers.remove(subscriber);
-    if (_subscribers.isEmpty && !_disposed) {
+    // Only dispose scoped instances when no subscribers remain
+    if (_subscribers.isEmpty && !_disposed && _scopedType != null) {
       dispose();
     }
   }
